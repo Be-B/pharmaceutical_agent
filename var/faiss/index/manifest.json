@@ -1,0 +1,10 @@
+{
+  "embedding_model": "text-embedding-3-large",
+  "data_files": {
+    "/Users/mklee/대학원/2026-1학기/빅데이터자연어처리기술/pharmaceutical_agent/data/drugs.xlsx": "905c7c0a43d393e14134162e072eb34f58fcb17a840c7e80ed22060100ddfc26",
+    "/Users/mklee/대학원/2026-1학기/빅데이터자연어처리기술/pharmaceutical_agent/data/health_functional_food.xlsx": "9df7a1d9c269336ac4b0ebc6be5e5fea41f802155c45e0f7c8441cba15560d85"
+  },
+  "doc_count": 49349,
+  "built_at": "2026-05-09T14:10:55.826576+00:00",
+  "openai_cost_usd": 1.3324681500000002
+}

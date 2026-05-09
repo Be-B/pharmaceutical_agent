@@ -1,0 +1,2 @@
+var/faiss/index/*.faiss filter=lfs diff=lfs merge=lfs -text
+var/faiss/index/*.pkl filter=lfs diff=lfs merge=lfs -text

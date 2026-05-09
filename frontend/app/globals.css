@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply font-sans antialiased bg-gray-50 text-gray-900;
+}
+
+/* Prose overrides for chat messages */
+.prose {
+  @apply text-gray-800;
+}
+.prose p {
+  @apply my-1.5;
+}
+.prose strong {
+  @apply font-semibold text-gray-900;
+}
+.prose ul {
+  @apply my-2 pl-4;
+}
+.prose li {
+  @apply my-0.5;
+}
+.prose h1, .prose h2, .prose h3 {
+  @apply font-semibold my-2;
+}
+
+/* Markdown 표 — 채팅 말풍선 안에서 깔끔하게 */
+.prose table {
+  @apply w-full my-3 text-sm border-collapse rounded-lg overflow-hidden border border-gray-200;
+  display: block;
+  overflow-x: auto;       /* 가로 스크롤 (좁은 화면 대응) */
+  white-space: normal;
+}
+.prose thead {
+  @apply bg-gray-50;
+}
+.prose th {
+  @apply px-3 py-2 text-left font-semibold text-gray-900 border-b border-gray-200;
+}
+.prose td {
+  @apply px-3 py-2 align-top border-b border-gray-100 text-gray-700;
+}
+.prose tbody tr:last-child td {
+  @apply border-b-0;
+}
+.prose tbody tr:hover {
+  @apply bg-gray-50/60;
+}
+
+/* 인라인 코드 */
+.prose code:not(pre code) {
+  @apply bg-gray-100 text-indigo-700 px-1.5 py-0.5 rounded text-[0.85em] font-mono;
+}
+.prose pre {
+  @apply bg-gray-900 text-gray-100 rounded-lg p-3 my-2 overflow-x-auto text-xs;
+}
+.prose pre code {
+  @apply bg-transparent text-gray-100 p-0;
+}
+
+/* 인용 */
+.prose blockquote {
+  @apply border-l-4 border-indigo-300 pl-3 my-2 italic text-gray-600;
+}
+
+/* 사용자 말풍선(prose-invert)에서는 표 색상 반전 */
+.prose-invert table {
+  @apply border-white/30;
+}
+.prose-invert thead {
+  @apply bg-white/10;
+}
+.prose-invert th {
+  @apply text-white border-white/30;
+}
+.prose-invert td {
+  @apply text-white/95 border-white/20;
+}
+.prose-invert code:not(pre code) {
+  @apply bg-white/15 text-white;
+}
+
+/* Inverted prose for user (indigo) bubbles */
+.prose-invert p,
+.prose-invert strong,
+.prose-invert li,
+.prose-invert h1,
+.prose-invert h2,
+.prose-invert h3 {
+  @apply text-white;
+}
+
+/* Auto-grow textarea */
+textarea {
+  field-sizing: content;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}

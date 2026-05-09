@@ -1,0 +1,26 @@
+# 대용량 데이터 (12MB+ xlsx) — indexer만 볼륨 마운트로 접근
+data/
+
+# Python 가상환경
+.venv/
+__pycache__/
+*.pyc
+
+# Node 의존성 및 빌드 캐시
+node_modules/
+.next/
+.turbo/
+
+# 런타임 데이터 (컨테이너 내부에서 생성)
+var/
+
+# Git
+.git/
+.gitignore
+
+# OS
+.DS_Store
+
+# 개발용 설정
+.env
+.env.local

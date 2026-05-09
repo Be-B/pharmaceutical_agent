@@ -1,0 +1,49 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      args:
+        UID: '1000'
+    user: '1000:1000'
+    ports:
+      - '8000:8000'
+    volumes:
+      - './var:/app/var'
+      # dev mode — 호스트 코드 → 컨테이너 마운트, --reload로 hot reload
+      - './backend/app:/app/app'
+      - './backend/alembic:/app/alembic'
+      - './backend/alembic.ini:/app/alembic.ini'
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        UID: '1000'
+    user: '1000:1000'
+    ports:
+      - '3000:3000'
+    volumes:
+      # dev mode — 호스트 소스 마운트, node_modules는 익명 볼륨으로 보호
+      # .next는 호스트 frontend/.next에 직접 쓰도록 (chmod 777 필요, 안 그러면 EACCES)
+      - './frontend:/app'
+      - '/app/node_modules'
+    environment:
+      # 브라우저에서 직접 호출하는 주소 — SSR 내부 통신 아님
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+
+  indexer:
+    build:
+      context: ./indexer
+      args:
+        UID: '1000'
+    user: '1000:1000'
+    volumes:
+      - './data:/app/data:ro'
+      - './var:/app/var'
+    env_file: .env
+    profiles:
+      - indexing

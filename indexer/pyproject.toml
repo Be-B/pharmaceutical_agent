@@ -1,0 +1,17 @@
+[project]
+name = "pharmaceutical-agent-indexer"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas~=2.2",
+    "openpyxl~=3.1",
+    "langchain~=0.3",
+    "langchain-openai~=0.2",
+    "langchain-community~=0.3",
+    "faiss-cpu~=1.9",
+    "tqdm~=4.66",
+    "pyyaml~=6.0",
+]
+
+[tool.uv]
+package = false
