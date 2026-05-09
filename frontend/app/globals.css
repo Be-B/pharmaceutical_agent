@@ -69,6 +69,11 @@ body {
   @apply border-l-4 border-indigo-300 pl-3 my-2 italic text-gray-600;
 }
 
+/* 이미지 — 의약품 사진은 작게 (말풍선 안에서) */
+.prose img {
+  @apply inline-block my-2 max-h-40 max-w-[200px] w-auto h-auto rounded-lg border border-gray-200 bg-white object-contain;
+}
+
 /* 사용자 말풍선(prose-invert)에서는 표 색상 반전 */
 .prose-invert table {
   @apply border-white/30;
