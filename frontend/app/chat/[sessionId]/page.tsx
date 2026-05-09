@@ -10,7 +10,7 @@ import { MessageInput } from "@/components/chat/MessageInput";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { Stethoscope } from "lucide-react";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BASE = "/api";
 
 export default function ChatSession() {
   const params = useParams<{ sessionId: string }>();

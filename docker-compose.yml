@@ -32,8 +32,9 @@ services:
       - './frontend:/app'
       - '/app/node_modules'
     environment:
-      # 브라우저에서 직접 호출하는 주소 — SSR 내부 통신 아님
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      # rewrites destination — frontend → backend 컨테이너 (docker network)
+      # 브라우저는 frontend의 /api/* 만 호출하므로 backend 외부 노출 불필요
+      - BACKEND_URL=http://backend:8000
 
   indexer:
     build:

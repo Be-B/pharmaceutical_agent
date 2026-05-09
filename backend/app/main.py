@@ -108,9 +108,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth_router, prefix="/auth", tags=["auth"])
-app.include_router(chat_router, prefix="/chat", tags=["chat"])
-app.include_router(prompts_router, prefix="/prompts", tags=["prompts"])
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
+app.include_router(prompts_router, prefix="/api/prompts", tags=["prompts"])
 
 
 @app.get(

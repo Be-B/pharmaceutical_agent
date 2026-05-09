@@ -1,4 +1,5 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// 동일 origin의 /api/* — Next.js rewrites가 backend 컨테이너로 프록시
+const BASE = "/api";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
