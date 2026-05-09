@@ -47,10 +47,20 @@ export default function ChatSession() {
     return () => abortRef.current?.abort();
   }, [sid]);
 
-  // Auto-scroll on new messages or typing indicator
+  // 스크롤 정책:
+  // - 새로고침/세션 진입(스트리밍 아님): 마지막 user 말풍선이 화면 상단에 오도록 즉시 점프
+  // - 스트리밍 중: 어시스턴트 답변이 흐르는 하단을 부드럽게 따라감
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [items, typing]);
+    const lastUser = document.querySelector<HTMLElement>("[data-last-user-msg]");
+    if (!streaming && lastUser) {
+      // paint 직후 점프 (DOM이 채워진 시점 보장)
+      requestAnimationFrame(() => {
+        lastUser.scrollIntoView({ behavior: "auto", block: "start" });
+      });
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [items, typing, streaming]);
 
   async function send(text: string) {
     // Add user message immediately

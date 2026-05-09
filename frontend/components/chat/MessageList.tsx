@@ -21,6 +21,11 @@ export type ChatItem =
   | { kind: "tool"; phase: string; name?: string; input?: { query?: string } };
 
 export function MessageList({ items }: { items: ChatItem[] }) {
+  // 마지막 user 메시지 인덱스 — 새로고침 시 이 말풍선이 화면 상단에 오도록 마킹
+  const lastUserIdx = items.reduce(
+    (acc, it, i) => (it.kind === "msg" && it.role === "user" ? i : acc),
+    -1,
+  );
   return (
     <div className="flex flex-col gap-2 w-full px-8">
       {items.map((item, i) => {
@@ -34,10 +39,12 @@ export function MessageList({ items }: { items: ChatItem[] }) {
             />
           );
         const isUser = item.role === "user";
+        const isLastUser = isUser && i === lastUserIdx;
         return (
           <div
             key={i}
-            className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+            data-last-user-msg={isLastUser ? "true" : undefined}
+            className={`flex ${isUser ? "justify-end" : "justify-start"} scroll-mt-4`}
           >
             <div
               className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${

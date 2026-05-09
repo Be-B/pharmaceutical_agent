@@ -1,16 +1,27 @@
+import json
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from langchain_core.messages import AIMessage, HumanMessage
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.orm import Session as DBSession
 
+from ..agent.builder import build_agent
 from ..common.errors import UNAUTHORIZED, FORBIDDEN
 from ..db.base import get_db
 from ..db.models import User
 from ..deps import get_current_user
-from .schemas import CreateSessionRequest, SessionPublic, MessageBody, MessagePublic
-from . import persistence, orchestrator
-from .sse import to_sse_dict
+from ..prompts.service import get_active_prompt
+from . import persistence
+from .schemas import CreateSessionRequest, MessageBody, MessagePublic, SessionPublic
+from .title import (
+    count_turns,
+    generate_session_title,
+    should_regenerate_title,
+)
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 SSE_RESPONSE_DOC = {
@@ -19,21 +30,40 @@ SSE_RESPONSE_DOC = {
             "Server-Sent Events 스트림. 각 이벤트는 `event:` 줄과 JSON `data:` 줄로 구성됩니다.\n\n"
             "**이벤트 타입:**\n"
             "- `token` — `{\"text\": \"...\"}` 어시스턴트가 생성한 토큰 조각\n"
-            "- `tool` — `{\"phase\": \"start|end\", \"tool_name\": \"...\", \"input\": {...}}` 도구 호출 진행 상황\n"
-            "- `done` — 스트림 정상 종료. `{\"message_id\": int}`\n"
+            "- `tool` — `{\"phase\": \"tool-started|tool-finished\", \"tool_name\": \"...\", \"input\": {...}}` 도구 호출 진행 상황\n"
+            "- `done` — 스트림 정상 종료. `{\"message_id\": int, \"session_title\": str|null}`\n"
             "- `error` — `{\"message\": \"...\"}` 에러 발생"
         ),
         "content": {
             "text/event-stream": {
                 "example": (
-                    "event: token\ndata: {\"text\": \"안녕\"}\n\n"
-                    "event: token\ndata: {\"text\": \"하세요\"}\n\n"
-                    "event: done\ndata: {\"message_id\": 42}\n\n"
+                    "event: tool\ndata: {\"phase\": \"tool-started\", \"tool_name\": \"search_drugs\", \"input\": {\"query\": \"타이레놀\"}}\n\n"
+                    "event: token\ndata: {\"text\": \"타이레놀\"}\n\n"
+                    "event: token\ndata: {\"text\": \"500mg은\"}\n\n"
+                    "event: done\ndata: {\"message_id\": 42, \"session_title\": \"타이레놀 복용\"}\n\n"
                 ),
             },
         },
     },
 }
+
+
+def _profile_block(user: User) -> str:
+    """사용자 프로필을 시스템 프롬프트 앞에 합칠 마크다운 블록."""
+    parts = []
+    if user.name: parts.append(f"이름: {user.name}")
+    if user.age is not None: parts.append(f"나이: {user.age}")
+    if user.gender: parts.append(f"성별: {user.gender}")
+    if user.symptoms_note: parts.append(f"증상/특이사항: {user.symptoms_note}")
+    if user.current_medications: parts.append(f"복용 중인 약물: {user.current_medications}")
+    if user.allergies: parts.append(f"알레르기: {user.allergies}")
+    if not parts:
+        return ""
+    return (
+        "## 사용자 프로필 (참고용)\n"
+        + "\n".join(parts)
+        + "\n\n사용자 검색 시 이 프로필을 참고하세요. 약물 상호작용/알레르기는 반드시 강조 안내."
+    )
 
 
 @router.post(
@@ -118,8 +148,103 @@ async def post_message(
     if not s:
         raise HTTPException(403, "세션을 찾을 수 없거나 접근 권한이 없습니다")
 
+    # user 메시지를 먼저 저장 — 클라이언트가 도중에 끊겨도 보존됨
+    persistence.save_user_message(db, session_id, body.content)
+
+    # 활성 시스템 프롬프트 + 사용자 프로필을 합쳐 ReAct agent 구성
+    active = get_active_prompt(db, "system.chat")
+    profile = _profile_block(user)
+    prompt_text = (profile + "\n\n---\n\n" + active.content) if profile else active.content
+    agent = build_agent(prompt_text, model=active.model, temperature=active.temperature)
+
+    history = persistence.list_messages(db, session_id)  # 방금 저장한 user 포함
+    lc_messages = [
+        HumanMessage(content=m.content) if m.role == "user" else AIMessage(content=m.content)
+        for m in history if m.role in ("user", "assistant")
+    ]
+
     async def event_gen():
-        async for ev in orchestrator.run(db, user.id, session_id, body.content):
-            yield to_sse_dict(ev)
+        final_parts: list[str] = []
+        tool_calls_log: list[dict] = []
+        try:
+            async for ev in agent.astream_events({"messages": lc_messages}, version="v2"):
+                kind = ev["event"]
+                data = ev.get("data", {})
+
+                if kind == "on_chat_model_stream":
+                    chunk = data.get("chunk")
+                    text = getattr(chunk, "content", "") if chunk else ""
+                    if isinstance(text, str) and text:
+                        final_parts.append(text)
+                        yield {
+                            "event": "token",
+                            "data": json.dumps({"text": text}, ensure_ascii=False),
+                        }
+
+                elif kind == "on_tool_start":
+                    name = ev.get("name", "")
+                    tin = data.get("input", {}) or {}
+                    # 기존 SSE 계약 유지: phase = "tool-started" / "tool-finished"
+                    tool_calls_log.append({"tool_name": name, "input": tin})
+                    logger.info("agent tool_start: %s input=%s", name, tin)
+                    yield {
+                        "event": "tool",
+                        "data": json.dumps(
+                            {"phase": "tool-started", "tool_name": name, "input": tin},
+                            ensure_ascii=False,
+                        ),
+                    }
+
+                elif kind == "on_tool_end":
+                    name = ev.get("name", "")
+                    logger.info("agent tool_end: %s", name)
+                    yield {
+                        "event": "tool",
+                        "data": json.dumps(
+                            {"phase": "tool-finished", "tool_name": name},
+                            ensure_ascii=False,
+                        ),
+                    }
+        except Exception as e:
+            logger.exception("agent stream failed")
+            yield {
+                "event": "error",
+                "data": json.dumps({"message": str(e)}, ensure_ascii=False),
+            }
+            return
+
+        # assistant 메시지 저장
+        final_text = "".join(final_parts).strip()
+        msg = persistence.save_assistant_message(
+            db, session_id, final_text,
+            tool_calls=tool_calls_log or None,
+            prompt_version_id=active.id,
+        )
+
+        # 자동 세션 제목: 첫 응답 + 5턴마다
+        new_title: str | None = None
+        all_msgs = persistence.list_messages(db, session_id)
+        turn = count_turns(all_msgs)
+        if should_regenerate_title(turn, s.title):
+            try:
+                generated = await generate_session_title(all_msgs)
+                if generated and generated != s.title:
+                    s.title = generated
+                    db.commit()
+                    new_title = generated
+            except Exception:
+                new_title = None
+
+        yield {
+            "event": "done",
+            "data": json.dumps(
+                {
+                    "message_id": msg.id,
+                    "prompt_version_id": active.id,
+                    "session_title": new_title,
+                },
+                ensure_ascii=False,
+            ),
+        }
 
     return EventSourceResponse(event_gen())
