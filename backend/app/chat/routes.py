@@ -247,4 +247,13 @@ async def post_message(
             ),
         }
 
-    return EventSourceResponse(event_gen())
+    # 중간 프록시(Next.js dev 서버 등)가 응답을 gzip으로 묶어 buffering하면
+    # 토큰이 한방에 도착해 SSE가 망가짐. 압축/변환 금지를 명시.
+    return EventSourceResponse(
+        event_gen(),
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Content-Encoding": "identity",
+        },
+    )
