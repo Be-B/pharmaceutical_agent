@@ -85,7 +85,7 @@
 │  /chat /prompts    │ ─────► │                                    │
 │  SSE EventSource   │ ◄───── │  ┌──────────────────────────────┐  │
 └────────────────────┘  text/ │  │  Auth (cookie JWT)           │  │
-                        event │  │  Chat Orchestrator (SSE)     │  │
+                        event │  │  Chat Routes (SSE 스트리밍)   │  │
                         stream│  │  Prompt Mgmt (admin)         │  │
                               │  └──────────────────────────────┘  │
                               │                │                   │
@@ -118,7 +118,7 @@
 ### 4.2 시나리오: 사용자가 "타이레놀 복용 간격" 질문
 
 1. 로그인 사용자가 입력창에 질문 입력 → `POST /chat/sessions/{sid}/messages` (SSE)
-2. Orchestrator가 user 메시지 저장 + 활성 시스템 프롬프트 + 사용자 프로필 합성
+2. 라우트 핸들러가 user 메시지 저장 + 활성 시스템 프롬프트 + 사용자 프로필 합성
 3. LangGraph ReAct 에이전트가 `search_drugs("타이레놀 복용 간격")` Tool 자동 호출
 4. FAISS top-20 검색 → Cohere rerank top-5 → 메타(품목코드, 이미지URL) 포함하여 LLM 컨텍스트 주입
 5. LLM이 답변 토큰 생성 → 백엔드가 `token` 이벤트로 즉시 스트림
