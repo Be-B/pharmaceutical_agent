@@ -147,6 +147,33 @@ docker compose up
 | 답변 생성(LLM) | OpenAI `gpt-5.4-nano` |
 | 상호작용 근거 | supp.ai (무료 REST, 2021-10-20 스냅샷) |
 
+### 응답 렌더링 — 프론트엔드 `markdownComponents`
+
+LLM 응답은 **GitHub-flavored Markdown 텍스트**로 스트리밍됩니다. 프론트는 이를 `react-markdown`(+`remark-gfm`)으로 파싱하고, `frontend/src/components/MessageBubble.jsx`의 **`markdownComponents`** 매핑으로 각 마크다운 요소를 다크 테마 React 컴포넌트로 치환해 렌더합니다.
+
+```
+스트리밍 텍스트(마크다운)
+   │  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+   ▼
+react-markdown 파싱 → 요소 트리(h1 / p / strong / table / img / a / code …)
+   │  components 매핑이 각 태그를 커스텀 렌더러로 교체
+   ▼
+다크 테마 스타일이 입혀진 React 엘리먼트 → 사용자 화면
+   (토큰이 도착할 때마다 다시 렌더 → 실시간 갱신)
+```
+
+주요 매핑(발췌):
+
+| 마크다운 | 렌더 결과 |
+|---|---|
+| `![제품명](url)` | `<img>` — **maxWidth 180px**, lazy load, 둥근 테두리 (약 사진) |
+| `[텍스트](url)` | `<a target="_blank">` — 새 탭 링크 (PubMed/DOI 등) |
+| `\| ... \|` 표 | 가로 스크롤 래퍼 + 다크 테마 `<table>` (GFM → `remark-gfm` 필요) |
+| ` ``` ` 코드블록 / `` `코드` `` | `<pre>` 블록 / 인라인은 초록 pill |
+| `**굵게**`, `- 목록`, `### 소제목` | 통일된 타이포(15px)·간격으로 스타일된 strong/ul/h3 등 |
+
+→ 그래서 사용자는 raw 마크다운이 아니라 **약 사진·클릭 가능한 논문 링크·정돈된 표**가 들어간 정돈된 답변을 보게 됩니다. (이미지 `src`가 비어있을 때 깨진 아이콘이 뜰 수 있는 점은 별도 개선 후보.)
+
 ---
 
 ## 📝 시스템 프롬프트 전문
