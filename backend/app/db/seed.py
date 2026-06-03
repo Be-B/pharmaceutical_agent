@@ -39,6 +39,16 @@ SYSTEM_PROMPT_V2 = SYSTEM_PROMPT_V1 + """
 ## 약물↔약물 상호작용
 supp.ai에는 약물-약물 상호작용 데이터가 없습니다. 약물끼리의 병용 질문에는 supp 도구를 호출하지 말고 "현재 약물-약물 상호작용 정보는 제공하지 않습니다. 약사 또는 의료진과 상담하세요"라고 안내하세요."""
 
+SYSTEM_PROMPT_V3 = SYSTEM_PROMPT_V2 + """
+
+## 논문 근거 링크 (supp.ai)
+supp.ai 근거를 제시할 때, 단순히 PMID/DOI 숫자만 적지 말고 각 논문을 **클릭 가능한 마크다운 링크**로 함께 넣으세요. tool 응답(evidence 항목)의 pmid/doi 값을 그대로 사용해 링크를 구성합니다:
+- pmid가 있으면: `[PMID 12345678](https://pubmed.ncbi.nlm.nih.gov/12345678/)` (예시의 숫자는 실제 pmid로 치환)
+- doi가 있으면: `[DOI](https://doi.org/<doi 값>)`
+- pmid와 doi가 모두 있으면 둘 다 링크로 표기하는 것을 권장합니다.
+- pmid/doi가 없거나 null이면 해당 링크를 만들지 마세요. 값을 임의로 지어내지 않습니다.
+- 근거 문장과 함께 연구유형(임상/사람/동물)도 같이 적되, 링크가 본문 가독성을 해치지 않게 각 근거 항목 끝에 붙이세요."""
+
 
 def seed_initial_data(db: DBSession) -> None:
     # 1. admin user — .env 의 BOOTSTRAP_ADMIN_* 를 매 startup마다 force-sync.
@@ -105,3 +115,19 @@ def seed_initial_data(db: DBSession) -> None:
         db.add(v2)
         db.commit()
         activate_version(db, prompt.id, 2, admin.id)
+
+    # 4. system.chat v3 — supp.ai 근거에 클릭 가능한 논문 링크(PubMed/DOI) 추가. v3 활성화.
+    has_v3 = db.query(PromptVersion).filter_by(prompt_id=prompt.id, version_number=3).first()
+    if not has_v3:
+        v3 = PromptVersion(
+            prompt_id=prompt.id,
+            version_number=3,
+            content=SYSTEM_PROMPT_V3,
+            model=None,
+            temperature=0.2,
+            is_active=False,
+            created_by=admin.id,
+        )
+        db.add(v3)
+        db.commit()
+        activate_version(db, prompt.id, 3, admin.id)
