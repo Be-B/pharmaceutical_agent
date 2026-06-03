@@ -22,6 +22,23 @@ SYSTEM_PROMPT_V1 = """당신은 한국어 의약품/건강기능식품 정보 �
 - 부작용·주의·상호작용은 **굵게** 강조
 - 검색 결과(tool 응답)에 image_url 값이 있으면 답변에 `![제품명](image_url)` 형식의 마크다운 이미지를 포함하세요. image_url이 비어있거나 null이면 절대 추가하지 마세요."""
 
+SYSTEM_PROMPT_V2 = SYSTEM_PROMPT_V1 + """
+
+## 상호작용(약물↔건강기능식품) 질문 처리
+사용자가 "이 약과 이 영양제/건기식을 같이 먹어도 되나?"처럼 상호작용을 물으면 supp.ai 도구를 사용하세요:
+1. 한글 약/건기식명을 영문 성분명으로 변환합니다(예: 와파린→Warfarin, 은행엽→Ginkgo).
+2. supp_search_agent(영문명)으로 각 개체의 cui를 얻습니다.
+3. supp_get_interaction(cui_a, cui_b)로 상호작용 논문 근거를 조회합니다.
+4. "이 약과 같이 먹으면 안 되는 것" 류 질문은 supp_list_interactions(cui)로 상대 목록을 얻습니다.
+
+근거 제시 원칙:
+- supp.ai 데이터는 2021-10-20 스냅샷이며 논문 "공동 언급(co-occurrence)" 기반입니다. 임상적 위험을 단정하지 말고, 근거 문장과 함께 PMID/DOI, 연구유형(임상/사람/동물)을 표기하세요. 사람·임상 연구를 우선 신뢰합니다.
+- found가 false면 "supp.ai 데이터 기준 알려진 상호작용이 확인되지 않았습니다"라고 안내하되 데이터 한계를 덧붙이세요.
+- ent_type이 drug로 분류됐어도 내인성 물질(Nitric Oxide 등)일 수 있으니 주의하세요.
+
+## 약물↔약물 상호작용
+supp.ai에는 약물-약물 상호작용 데이터가 없습니다. 약물끼리의 병용 질문에는 supp 도구를 호출하지 말고 "현재 약물-약물 상호작용 정보는 제공하지 않습니다. 약사 또는 의료진과 상담하세요"라고 안내하세요."""
+
 
 def seed_initial_data(db: DBSession) -> None:
     # 1. admin user — .env 의 BOOTSTRAP_ADMIN_* 를 매 startup마다 force-sync.
@@ -70,3 +87,21 @@ def seed_initial_data(db: DBSession) -> None:
         )
         db.add(v1)
         db.commit()
+
+    # 3. system.chat v2 — supp.ai 상호작용 지침 추가. v2를 활성화하고 v1은 롤백용 보존.
+    from ..prompts.service import activate_version  # 순환 import 방지: 지연 import
+
+    has_v2 = db.query(PromptVersion).filter_by(prompt_id=prompt.id, version_number=2).first()
+    if not has_v2:
+        v2 = PromptVersion(
+            prompt_id=prompt.id,
+            version_number=2,
+            content=SYSTEM_PROMPT_V2,
+            model=None,
+            temperature=0.2,
+            is_active=False,
+            created_by=admin.id,
+        )
+        db.add(v2)
+        db.commit()
+        activate_version(db, prompt.id, 2, admin.id)
