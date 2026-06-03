@@ -96,3 +96,40 @@ def test_reconstruct_sentence_joins_and_cleans_punctuation():
 def test_reconstruct_sentence_skips_empty_spans():
     spans = [{"text": "A"}, {"text": ""}, {"cui": "C1"}, {"text": "B ."}]
     assert supp_ai.reconstruct_sentence(spans) == "A B."
+
+
+def _ev(pmid, year, *, clinical=False, human=False, animal=False, retraction=False, text="finding ."):
+    return {
+        "paper": {
+            "pmid": pmid,
+            "doi": f"doi-{pmid}",
+            "year": year,
+            "venue": f"V{pmid}",
+            "clinical_study": clinical,
+            "human_study": human,
+            "animal_study": animal,
+            "retraction": retraction,
+        },
+        "sentences": [{"spans": [{"text": text}]}],
+    }
+
+
+def test_summarize_evidence_filters_sorts_and_caps():
+    evidence = [
+        _ev(1, 2010, animal=True),
+        _ev(2, 2020, human=True),
+        _ev(3, 2005, clinical=True),
+        _ev(4, 2021, human=True, retraction=True),  # 철회 -> 제외
+    ]
+    out = supp_ai.summarize_evidence(evidence, max_items=5)
+    # 철회 제외 + 사람/임상 우선 + 최신연도순: clinical(3) -> human(2) -> animal(1)
+    assert [e["pmid"] for e in out] == [3, 2, 1]
+    assert [e["study_type"] for e in out] == ["clinical", "human", "animal"]
+    assert out[0]["sentence"] == "finding."
+    assert out[0]["doi"] == "doi-3"
+
+
+def test_summarize_evidence_respects_max_items():
+    evidence = [_ev(i, 2000 + i, human=True) for i in range(10)]
+    out = supp_ai.summarize_evidence(evidence, max_items=3)
+    assert len(out) == 3

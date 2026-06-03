@@ -58,3 +58,41 @@ def reconstruct_sentence(spans: list[dict]) -> str:
     text = re.sub(r"([(\[])\s+", r"\1", text)        # 여는 괄호 뒤 공백 제거
     text = re.sub(r"\s{2,}", " ", text).strip()      # 중복 공백 축약
     return text
+
+
+_TYPE_RANK = {"clinical": 0, "human": 1, "animal": 2, "other": 3}
+
+
+def _study_type(paper: dict) -> str:
+    if paper.get("clinical_study"):
+        return "clinical"
+    if paper.get("human_study"):
+        return "human"
+    if paper.get("animal_study"):
+        return "animal"
+    return "other"
+
+
+def summarize_evidence(evidence: list[dict], max_items: int) -> list[dict]:
+    """근거 논문을 요약: 철회 제외, 논문당 대표 문장 1개, 사람/임상 우선·최신연도순, 상위 N."""
+    items: list[dict] = []
+    for ev in evidence:
+        paper = ev.get("paper", {})
+        if paper.get("retraction"):
+            continue
+        sentences = ev.get("sentences", [])
+        sentence = (
+            reconstruct_sentence(sentences[0].get("spans", [])) if sentences else ""
+        )
+        items.append(
+            {
+                "sentence": sentence,
+                "pmid": paper.get("pmid"),
+                "doi": paper.get("doi"),
+                "year": paper.get("year"),
+                "venue": paper.get("venue"),
+                "study_type": _study_type(paper),
+            }
+        )
+    items.sort(key=lambda x: (_TYPE_RANK.get(x["study_type"], 3), -(x["year"] or 0)))
+    return items[:max_items]
