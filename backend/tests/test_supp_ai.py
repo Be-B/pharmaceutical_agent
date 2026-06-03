@@ -79,3 +79,20 @@ async def test_request_caches_result(monkeypatch):
     b = await supp_ai._request("/agent/C1")
     assert a == b == {"ok": True}
     assert calls["n"] == 1  # 두 번째는 캐시
+
+
+def test_reconstruct_sentence_joins_and_cleans_punctuation():
+    spans = [
+        {"text": "Co-treatment with"},
+        {"text": "GbE"},
+        {"text": "increased the level ."},
+    ]
+    assert (
+        supp_ai.reconstruct_sentence(spans)
+        == "Co-treatment with GbE increased the level."
+    )
+
+
+def test_reconstruct_sentence_skips_empty_spans():
+    spans = [{"text": "A"}, {"text": ""}, {"cui": "C1"}, {"text": "B ."}]
+    assert supp_ai.reconstruct_sentence(spans) == "A B."

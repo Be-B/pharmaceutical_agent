@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Optional
 
 import httpx
@@ -48,3 +49,12 @@ async def _request(path: str, params: Optional[dict] = None) -> Optional[dict]:
     if len(_CACHE) < _CACHE_MAX:
         _CACHE[key] = result
     return result
+
+
+def reconstruct_sentence(spans: list[dict]) -> str:
+    """spans[].text를 이어붙여 원문 문장을 복원하고 구두점 주변 공백을 정리."""
+    text = " ".join(s.get("text", "") for s in spans if s.get("text"))
+    text = re.sub(r"\s+([,.;:%)\]])", r"\1", text)  # 구두점/닫는괄호 앞 공백 제거
+    text = re.sub(r"([(\[])\s+", r"\1", text)        # 여는 괄호 뒤 공백 제거
+    text = re.sub(r"\s{2,}", " ", text).strip()      # 중복 공백 축약
+    return text
