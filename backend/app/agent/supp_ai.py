@@ -96,3 +96,54 @@ def summarize_evidence(evidence: list[dict], max_items: int) -> list[dict]:
         )
     items.sort(key=lambda x: (_TYPE_RANK.get(x["study_type"], 3), -(x["year"] or 0)))
     return items[:max_items]
+
+
+async def search_agent(query: str, page: int = 0) -> list[dict]:
+    """이름/동의어로 보충제·약물을 검색해 후보 개체(cui 포함)를 반환."""
+    data = await _request("/agent/search", {"q": query, "p": page})
+    results = (data or {}).get("results", [])
+    return [
+        {
+            "cui": r.get("cui"),
+            "preferred_name": r.get("preferred_name"),
+            "ent_type": r.get("ent_type"),
+            "interacts_with_count": r.get("interacts_with_count"),
+        }
+        for r in results
+    ]
+
+
+async def get_interaction(cui_a: str, cui_b: str) -> Optional[dict]:
+    """두 cui 사이 상호작용의 요약 근거를 반환. 없으면 None. (cui 순서 무관)"""
+    data = await _request(f"/interaction/{cui_a}-{cui_b}")
+    if data is None:
+        return None
+    agents = [
+        {"cui": a.get("cui"), "name": a.get("preferred_name"), "ent_type": a.get("ent_type")}
+        for a in data.get("agents", [])
+    ]
+    evidence = summarize_evidence(data.get("evidence", []), settings.SUPP_AI_MAX_EVIDENCE)
+    return {
+        "agents": agents,
+        "evidence": evidence,
+        "evidence_total": len(data.get("evidence", [])),
+    }
+
+
+async def list_interactions(cui: str, page: int = 1) -> dict:
+    """한 cui와 상호작용하는 상대 목록(1페이지=50)을 반환."""
+    data = await _request(f"/agent/{cui}/interactions", {"p": page})
+    if data is None:
+        return {"total": 0, "has_more": False, "partners": []}
+    per_page = data.get("interactions_per_page", 50)
+    total = data.get("total", 0)
+    partners = [
+        {
+            "cui": it.get("agent", {}).get("cui"),
+            "name": it.get("agent", {}).get("preferred_name"),
+            "ent_type": it.get("agent", {}).get("ent_type"),
+            "evidence_count": len(it.get("evidence", [])),
+        }
+        for it in data.get("interactions", [])
+    ]
+    return {"total": total, "has_more": page * per_page < total, "partners": partners}

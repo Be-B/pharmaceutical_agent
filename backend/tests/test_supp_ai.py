@@ -133,3 +133,82 @@ def test_summarize_evidence_respects_max_items():
     evidence = [_ev(i, 2000 + i, human=True) for i in range(10)]
     out = supp_ai.summarize_evidence(evidence, max_items=3)
     assert len(out) == 3
+
+
+async def test_search_agent_shapes_results(monkeypatch):
+    async def fake_request(path, params=None):
+        assert path == "/agent/search"
+        return {
+            "results": [
+                {
+                    "cui": "C0043031",
+                    "preferred_name": "Warfarin",
+                    "ent_type": "drug",
+                    "interacts_with_count": 80,
+                    "synonyms": ["x"],
+                    "definition": "long text",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(supp_ai, "_request", fake_request)
+    out = await supp_ai.search_agent("Warfarin")
+    assert out == [
+        {
+            "cui": "C0043031",
+            "preferred_name": "Warfarin",
+            "ent_type": "drug",
+            "interacts_with_count": 80,
+        }
+    ]
+
+
+async def test_get_interaction_found(monkeypatch):
+    async def fake_request(path, params=None):
+        return {
+            "agents": [
+                {"cui": "C0043031", "preferred_name": "Warfarin", "ent_type": "drug"},
+                {"cui": "C3531686", "preferred_name": "Ginkgo Biloba Whole", "ent_type": "supplement"},
+            ],
+            "evidence": [_ev(22282402, 2012, human=True, text="GbE increased warfarin levels .")],
+        }
+
+    monkeypatch.setattr(supp_ai, "_request", fake_request)
+    out = await supp_ai.get_interaction("C0043031", "C3531686")
+    assert out["evidence_total"] == 1
+    assert out["agents"][0] == {"cui": "C0043031", "name": "Warfarin", "ent_type": "drug"}
+    assert out["evidence"][0]["pmid"] == 22282402
+
+
+async def test_get_interaction_404_returns_none(monkeypatch):
+    async def fake_request(path, params=None):
+        return None
+
+    monkeypatch.setattr(supp_ai, "_request", fake_request)
+    assert await supp_ai.get_interaction("C1", "C2") is None
+
+
+async def test_list_interactions_shapes(monkeypatch):
+    async def fake_request(path, params=None):
+        return {
+            "total": 69,
+            "interactions_per_page": 50,
+            "page": 1,
+            "interactions": [
+                {
+                    "agent": {"cui": "C0028128", "preferred_name": "Nitric Oxide", "ent_type": "drug"},
+                    "evidence": [{}, {}],
+                }
+            ],
+        }
+
+    monkeypatch.setattr(supp_ai, "_request", fake_request)
+    out = await supp_ai.list_interactions("C3531686")
+    assert out["total"] == 69
+    assert out["has_more"] is True  # 1*50 < 69
+    assert out["partners"][0] == {
+        "cui": "C0028128",
+        "name": "Nitric Oxide",
+        "ent_type": "drug",
+        "evidence_count": 2,
+    }
