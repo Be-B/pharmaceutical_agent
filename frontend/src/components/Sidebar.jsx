@@ -2,22 +2,20 @@ import HealthProfile from './HealthProfile';
 
 export default function Sidebar({ conversations, activeId, onSelect, onNew, onLogout, profile, onProfileChange }) {
   return (
-    <aside className="flex flex-col h-full shrink-0" style={{ width: '280px', background: '#121518' }}>
-      {/* Brand */}
-      <div className="flex items-center gap-3 px-5 py-5">
-        <div className="flex items-center justify-center rounded-full" style={{ width: 36, height: 36, background: 'rgba(50,203,148,0.2)' }}>
-          <span style={{ color: '#32CB94', fontSize: '20px', fontWeight: 700, lineHeight: 1 }}>+</span>
+    <aside className="flex flex-col h-full shrink-0" style={{ width: '280px', background: '#121518', borderRight: '1px solid #20252A' }}>
+      {/* Brand — 메인 헤더와 동일한 64px 높이로 상단 라인을 맞춤 */}
+      <div className="flex items-center gap-2.5 shrink-0" style={{ height: 64, padding: '0 20px', borderBottom: '1px solid #33383E' }}>
+        <div className="flex items-center justify-center rounded-full shrink-0" style={{ width: 32, height: 32, background: 'rgba(50,203,148,0.2)' }}>
+          <span style={{ color: '#32CB94', fontSize: '18px', fontWeight: 700, lineHeight: 1 }}>+</span>
         </div>
-        <span style={{ color: '#EBEFF3', fontSize: '18px', fontWeight: 600 }}>약톡 AI</span>
+        <span style={{ color: '#EBEFF3', fontSize: '17px', fontWeight: 600 }}>약톡 AI</span>
         <span style={{ background: 'rgba(50,203,148,0.15)', color: '#32CB94', fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: 99 }}>Beta</span>
       </div>
 
-      <div className="mx-4 mb-3" style={{ height: '1px', background: '#33383E' }} />
-
       {/* Health Profile Toggle */}
-      <HealthProfile profile={profile} onChange={onProfileChange} />
-
-      <div className="mx-4 mb-3" style={{ height: '1px', background: '#33383E' }} />
+      <div className="pt-4">
+        <HealthProfile profile={profile} onChange={onProfileChange} />
+      </div>
 
       {/* New Chat */}
       <div className="px-4 mb-4">
@@ -54,7 +52,7 @@ export default function Sidebar({ conversations, activeId, onSelect, onNew, onLo
       </div>
 
       {/* Disclaimer + Logout */}
-      <div className="mx-4 mb-4 space-y-2">
+      <div className="mx-4 mt-2 mb-4 pt-3 space-y-2" style={{ borderTop: '1px solid #20252A' }}>
         <div className="rounded-xl" style={{ background: '#24282D', color: '#87929F', fontSize: '12px', lineHeight: 1.6, padding: '12px 14px' }}>
           ⚠ 본 서비스는 참고용이며<br />전문의 상담을 권장합니다.
         </div>

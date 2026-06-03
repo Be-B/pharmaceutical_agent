@@ -34,13 +34,18 @@ export default function ChatWindow({ messages, isLoading }) {
     );
   }
 
+  // 첫 토큰을 기다리는 동안에만 '생각 중' 점을 보여준다.
+  // (스트리밍이 시작돼 답변 버블이 채워지는 중에는 중복이라 숨긴다)
+  const last = messages[messages.length - 1];
+  const showThinking = isLoading && (!last || last.role !== 'assistant' || !last.content);
+
   return (
-    <div className="flex-1 overflow-y-auto py-6 flex flex-col items-center">
-      <div style={{ width: '100%', maxWidth: '720px', padding: '0 16px' }}>
+    <div className="flex-1 overflow-y-auto flex flex-col items-center" style={{ padding: '32px 0' }}>
+      <div style={{ width: '100%', maxWidth: '760px', padding: '0 28px' }}>
         {messages.map((msg) => (
           <MessageBubble key={msg.id} message={msg} />
         ))}
-        {isLoading && (
+        {showThinking && (
           <div className="flex gap-3 mb-6">
             <div className="relative shrink-0" style={{ width: 36, height: 36 }}>
               <div className="absolute inset-0 rounded-full" style={{ background: 'rgba(50,203,148,0.2)' }} />
