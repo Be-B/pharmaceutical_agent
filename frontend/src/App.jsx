@@ -4,6 +4,7 @@ import ChatWindow from './components/ChatWindow';
 import InputBar from './components/InputBar';
 import LoginPage from './components/LoginPage';
 import { authMe, authLogout, getSessions, createSession, getMessages, sendMessageStream } from './api';
+import { parseSSE } from './sse';
 import './index.css';
 
 // VITE_API_URL이 없으면 Vercel 프록시(상대경로) 사용, 'mock'이면 mock 모드
@@ -22,28 +23,6 @@ function buildProfileContext(profile) {
   if (profile.symptoms.length > 0) parts.push(profile.symptoms.join(', '));
   if (profile.medications) parts.push(`복용약: ${profile.medications}`);
   return parts.join(' · ');
-}
-
-// ── SSE 파싱 ───────────────────────────────────────────
-async function* parseSSE(response) {
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const raw = line.slice(6).trim();
-        if (!raw || raw === '[DONE]') continue;
-        try { yield JSON.parse(raw); } catch { /* skip malformed */ }
-      }
-    }
-  }
 }
 
 export default function App() {
@@ -151,18 +130,24 @@ export default function App() {
       const assistantId = `a-${Date.now()}`;
       setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '' }]);
 
-      for await (const event of parseSSE(response)) {
-        if (event.type === 'token' && event.content) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId ? { ...m, content: m.content + event.content } : m
-            )
-          );
-        } else if (event.type === 'done') {
+      for await (const { event, data } of parseSSE(response)) {
+        if (event === 'token') {
+          const piece = (data && data.text) || '';
+          if (piece) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, content: m.content + piece } : m
+              )
+            );
+          }
+        } else if (event === 'done') {
+          // 백엔드가 자동 생성한 세션 제목을 사이드바에 반영
+          if (data && data.session_title) loadSessions();
           break;
-        } else if (event.type === 'error') {
-          throw new Error(event.content ?? '스트리밍 오류');
+        } else if (event === 'error') {
+          throw new Error((data && data.message) || '스트리밍 오류');
         }
+        // 'tool' 이벤트는 로딩 인디케이터로 충분하므로 무시
       }
     } catch (err) {
       setMessages((prev) => [...prev, { id: `err-${Date.now()}`, role: 'assistant', content: `오류가 발생했습니다: ${err.message}` }]);
@@ -188,6 +173,8 @@ export default function App() {
     return <LoginPage onLogin={setUser} />;
   }
 
+  const activeTitle = sessions.find((s) => s.id === activeId)?.title;
+
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#191C1F' }}>
       <Sidebar
@@ -200,9 +187,10 @@ export default function App() {
         onProfileChange={setProfile}
       />
       <main className="flex-1 flex flex-col min-w-0" style={{ background: '#191C1F' }}>
-        <div className="flex items-center justify-center px-6 shrink-0" style={{ height: 60, borderBottom: '1px solid #33383E' }}>
-          <span style={{ color: '#EBEFF3', fontSize: '15px', fontWeight: 600 }}>약톡 AI</span>
-          <span className="ml-2 rounded-full font-medium" style={{ background: 'rgba(50,203,148,0.15)', color: '#32CB94', fontSize: '11px', padding: '2px 8px' }}>Beta</span>
+        <div className="flex items-center shrink-0" style={{ height: 64, padding: '0 24px', borderBottom: '1px solid #33383E' }}>
+          <span className="truncate" style={{ color: '#EBEFF3', fontSize: '15px', fontWeight: 600 }}>
+            {activeTitle || '새 상담'}
+          </span>
         </div>
         <ChatWindow messages={messages} isLoading={isStreaming} />
         <InputBar onSend={handleSend} isLoading={isStreaming} />

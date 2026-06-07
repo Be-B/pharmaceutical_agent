@@ -6,6 +6,12 @@ from cohere.core.api_error import ApiError
 from langchain_core.tools import tool
 from langchain_core.documents import Document
 from .retriever import search_with_score
+from .supp_ai import (
+    SuppAIError,
+    search_agent as _supp_search_agent,
+    get_interaction as _supp_get_interaction,
+    list_interactions as _supp_list_interactions,
+)
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -92,4 +98,46 @@ async def search_all(query: str) -> list[dict]:
     return out
 
 
-ALL_TOOLS = [search_drugs, search_health_foods, search_all]
+@tool
+async def supp_search_agent(query: str) -> list[dict]:
+    """supp.ai에서 보충제/의약품 개체를 검색해 CUI를 얻습니다. query는 반드시 영문 성분명/약물명이어야 합니다(예: "Warfarin", "Ginkgo"). 한글명은 먼저 영문으로 변환하세요. 반환된 cui를 supp_get_interaction / supp_list_interactions의 인자로 사용합니다."""
+    logger.info("TOOL CALL: supp_search_agent(query=%r)", query)
+    try:
+        out = await _supp_search_agent(query)
+    except SuppAIError as e:
+        return [{"error": f"supp.ai 조회 실패: {e}"}]
+    return out[:5]
+
+
+@tool
+async def supp_get_interaction(cui_a: str, cui_b: str) -> dict:
+    """두 개체(보충제↔의약품)의 CUI 사이 상호작용 논문 근거를 반환합니다. cui 순서는 무관합니다. 먼저 supp_search_agent로 두 cui를 얻으세요. 알려진 상호작용이 없으면 {"found": false}를 반환합니다."""
+    logger.info("TOOL CALL: supp_get_interaction(%r, %r)", cui_a, cui_b)
+    try:
+        out = await _supp_get_interaction(cui_a, cui_b)
+    except SuppAIError as e:
+        return {"found": False, "error": f"supp.ai 조회 실패: {e}"}
+    if out is None:
+        return {"found": False}
+    return {"found": True, **out}
+
+
+@tool
+async def supp_list_interactions(cui: str) -> dict:
+    """한 개체(cui)와 상호작용하는 모든 상대를 나열합니다. "이 약과 같이 먹으면 안 되는 영양제" 같은 질문에 사용하세요. 먼저 supp_search_agent로 cui를 얻으세요."""
+    logger.info("TOOL CALL: supp_list_interactions(%r)", cui)
+    try:
+        out = await _supp_list_interactions(cui)
+    except SuppAIError as e:
+        return {"error": f"supp.ai 조회 실패: {e}"}
+    return out
+
+
+ALL_TOOLS = [
+    search_drugs,
+    search_health_foods,
+    search_all,
+    supp_search_agent,
+    supp_get_interaction,
+    supp_list_interactions,
+]

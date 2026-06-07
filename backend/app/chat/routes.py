@@ -11,6 +11,7 @@ from ..common.errors import UNAUTHORIZED, FORBIDDEN
 from ..db.base import get_db
 from ..db.models import User
 from ..deps import get_current_user
+from ..observability import get_langfuse_handler
 from ..prompts.service import get_active_prompt
 from . import persistence
 from .schemas import CreateSessionRequest, MessageBody, MessagePublic, SessionPublic
@@ -163,11 +164,19 @@ async def post_message(
         for m in history if m.role in ("user", "assistant")
     ]
 
+    # Langfuse 트레이싱(옵셔널) — 세션·사용자 단위로 묶음. 키 미설정 시 None.
+    lf_handler = get_langfuse_handler(
+        session_id=session_id, user_id=str(user.id), trace_name="chat"
+    )
+    run_config = {"callbacks": [lf_handler]} if lf_handler else {}
+
     async def event_gen():
         final_parts: list[str] = []
         tool_calls_log: list[dict] = []
         try:
-            async for ev in agent.astream_events({"messages": lc_messages}, version="v2"):
+            async for ev in agent.astream_events(
+                {"messages": lc_messages}, version="v2", config=run_config
+            ):
                 kind = ev["event"]
                 data = ev.get("data", {})
 
@@ -212,6 +221,9 @@ async def post_message(
                 "data": json.dumps({"message": str(e)}, ensure_ascii=False),
             }
             return
+        finally:
+            if lf_handler:
+                lf_handler.flush()
 
         # assistant 메시지 저장
         final_text = "".join(final_parts).strip()
@@ -227,7 +239,7 @@ async def post_message(
         turn = count_turns(all_msgs)
         if should_regenerate_title(turn, s.title):
             try:
-                generated = await generate_session_title(all_msgs)
+                generated = await generate_session_title(all_msgs, session_id=session_id)
                 if generated and generated != s.title:
                     s.title = generated
                     db.commit()

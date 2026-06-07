@@ -22,6 +22,33 @@ SYSTEM_PROMPT_V1 = """당신은 한국어 의약품/건강기능식품 정보 �
 - 부작용·주의·상호작용은 **굵게** 강조
 - 검색 결과(tool 응답)에 image_url 값이 있으면 답변에 `![제품명](image_url)` 형식의 마크다운 이미지를 포함하세요. image_url이 비어있거나 null이면 절대 추가하지 마세요."""
 
+SYSTEM_PROMPT_V2 = SYSTEM_PROMPT_V1 + """
+
+## 상호작용(약물↔건강기능식품) 질문 처리
+사용자가 "이 약과 이 영양제/건기식을 같이 먹어도 되나?"처럼 상호작용을 물으면 supp.ai 도구를 사용하세요:
+1. 한글 약/건기식명을 영문 성분명으로 변환합니다(예: 와파린→Warfarin, 은행엽→Ginkgo).
+2. supp_search_agent(영문명)으로 각 개체의 cui를 얻습니다.
+3. supp_get_interaction(cui_a, cui_b)로 상호작용 논문 근거를 조회합니다.
+4. "이 약과 같이 먹으면 안 되는 것" 류 질문은 supp_list_interactions(cui)로 상대 목록을 얻습니다.
+
+근거 제시 원칙:
+- supp.ai 데이터는 2021-10-20 스냅샷이며 논문 "공동 언급(co-occurrence)" 기반입니다. 임상적 위험을 단정하지 말고, 근거 문장과 함께 PMID/DOI, 연구유형(임상/사람/동물)을 표기하세요. 사람·임상 연구를 우선 신뢰합니다.
+- found가 false면 "supp.ai 데이터 기준 알려진 상호작용이 확인되지 않았습니다"라고 안내하되 데이터 한계를 덧붙이세요.
+- ent_type이 drug로 분류됐어도 내인성 물질(Nitric Oxide 등)일 수 있으니 주의하세요.
+
+## 약물↔약물 상호작용
+supp.ai에는 약물-약물 상호작용 데이터가 없습니다. 약물끼리의 병용 질문에는 supp 도구를 호출하지 말고 "현재 약물-약물 상호작용 정보는 제공하지 않습니다. 약사 또는 의료진과 상담하세요"라고 안내하세요."""
+
+SYSTEM_PROMPT_V3 = SYSTEM_PROMPT_V2 + """
+
+## 논문 근거 링크 (supp.ai)
+supp.ai 근거를 제시할 때, 단순히 PMID/DOI 숫자만 적지 말고 각 논문을 **클릭 가능한 마크다운 링크**로 함께 넣으세요. tool 응답(evidence 항목)의 pmid/doi 값을 그대로 사용해 링크를 구성합니다:
+- pmid가 있으면: `[PMID 12345678](https://pubmed.ncbi.nlm.nih.gov/12345678/)` (예시의 숫자는 실제 pmid로 치환)
+- doi가 있으면: `[DOI](https://doi.org/<doi 값>)`
+- pmid와 doi가 모두 있으면 둘 다 링크로 표기하는 것을 권장합니다.
+- pmid/doi가 없거나 null이면 해당 링크를 만들지 마세요. 값을 임의로 지어내지 않습니다.
+- 근거 문장과 함께 연구유형(임상/사람/동물)도 같이 적되, 링크가 본문 가독성을 해치지 않게 각 근거 항목 끝에 붙이세요."""
+
 
 def seed_initial_data(db: DBSession) -> None:
     # 1. admin user — .env 의 BOOTSTRAP_ADMIN_* 를 매 startup마다 force-sync.
@@ -70,3 +97,37 @@ def seed_initial_data(db: DBSession) -> None:
         )
         db.add(v1)
         db.commit()
+
+    # 3. system.chat v2 — supp.ai 상호작용 지침 추가. v2를 활성화하고 v1은 롤백용 보존.
+    from ..prompts.service import activate_version  # 순환 import 방지: 지연 import
+
+    has_v2 = db.query(PromptVersion).filter_by(prompt_id=prompt.id, version_number=2).first()
+    if not has_v2:
+        v2 = PromptVersion(
+            prompt_id=prompt.id,
+            version_number=2,
+            content=SYSTEM_PROMPT_V2,
+            model=None,
+            temperature=0.2,
+            is_active=False,
+            created_by=admin.id,
+        )
+        db.add(v2)
+        db.commit()
+        activate_version(db, prompt.id, 2, admin.id)
+
+    # 4. system.chat v3 — supp.ai 근거에 클릭 가능한 논문 링크(PubMed/DOI) 추가. v3 활성화.
+    has_v3 = db.query(PromptVersion).filter_by(prompt_id=prompt.id, version_number=3).first()
+    if not has_v3:
+        v3 = PromptVersion(
+            prompt_id=prompt.id,
+            version_number=3,
+            content=SYSTEM_PROMPT_V3,
+            model=None,
+            temperature=0.2,
+            is_active=False,
+            created_by=admin.id,
+        )
+        db.add(v3)
+        db.commit()
+        activate_version(db, prompt.id, 3, admin.id)
