@@ -230,3 +230,19 @@ supp.ai 근거를 제시할 때, 단순히 PMID/DOI 숫자만 적지 말고 각 
 - pmid/doi가 없거나 null이면 해당 링크를 만들지 마세요. 값을 임의로 지어내지 않습니다.
 - 근거 문장과 함께 연구유형(임상/사람/동물)도 같이 적되, 링크가 본문 가독성을 해치지 않게 각 근거 항목 끝에 붙이세요.
 ```
+
+---
+
+## 🔧 수정 내역 (2026-06-07) — Docker 개발 환경 · Langfuse 관측
+
+### Docker 개발 환경
+- **프론트엔드 Docker화 복구**: Vite 전환 때 빠졌던 `frontend/Dockerfile`(node:22 dev 서버) + `frontend/.dockerignore` 신규 추가 → `docker compose up`만으로 프론트(:3000)·백엔드(:8000) 동시 기동.
+- `frontend/vite.config.js`:
+  - `/api` 프록시 타깃을 `BACKEND_URL` 환경변수 기반으로 (도커=`http://backend:8000`, 로컬 비-Docker=`http://127.0.0.1:8000` 폴백).
+  - `host: true`(컨테이너 0.0.0.0 바인딩), 외부 도메인 접근용 `allowedHosts` 추가(`kyunhome.iptime.org`, 콤마구분 `ALLOWED_HOSTS` 환경변수로 확장).
+
+### Langfuse 관측(트레이싱) 연동
+- `langfuse~=2.0` 추가. `backend/app/observability.py` 신규 — **키 설정 시에만** 활성화되는 LangChain `CallbackHandler` 팩토리(요청별 `session_id`/`user_id`로 트레이스 그룹화). 키 미설정이면 자동 비활성(완전 옵셔널).
+- 메인 ReAct 에이전트(`chat/routes.py`의 `astream_events`)와 세션 제목 생성(`chat/title.py`)에 핸들러 주입 + 스트림 종료 시 `flush()`.
+- 설정 키: `.env`의 `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_BASE_URL`.
+- **self-host 연동**: Langfuse v3를 별도 compose로 로컬 기동(UI `:3001`)할 때, 백엔드 컨테이너→호스트 접근을 위해 `docker-compose.yml` backend에 `extra_hosts: ["host.docker.internal:host-gateway"]`를 추가하고 `LANGFUSE_BASE_URL=http://host.docker.internal:3001` 사용. (컨테이너 내부의 `localhost`는 컨테이너 자신이라 호스트에 못 닿음에 주의.)

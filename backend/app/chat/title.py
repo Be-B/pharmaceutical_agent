@@ -7,6 +7,7 @@ from langchain_openai import ChatOpenAI
 
 from ..config import settings
 from ..db.models import Message
+from ..observability import get_langfuse_handler
 
 
 DEFAULT_TITLE = "새 대화"
@@ -79,7 +80,9 @@ def should_regenerate_title(turn: int, current_title: str) -> bool:
     return False
 
 
-async def generate_session_title(messages: list[Message]) -> str:
+async def generate_session_title(
+    messages: list[Message], *, session_id: str | None = None
+) -> str:
     """대화 history 기반 제목 생성. 항상 비어있지 않은 문자열 반환."""
     if not messages:
         return DEFAULT_TITLE
@@ -94,13 +97,21 @@ async def generate_session_title(messages: list[Message]) -> str:
             api_key=settings.OPENAI_API_KEY,
             max_tokens=30,
         )
+        # Langfuse(옵셔널) — 채팅과 같은 session_id로 묶어 트레이싱
+        lf = get_langfuse_handler(session_id=session_id, trace_name="session-title")
+        cfg = {"callbacks": [lf]} if lf else {}
         resp = await asyncio.wait_for(
-            llm.ainvoke([
-                SystemMessage(content=_SYSTEM_PROMPT),
-                HumanMessage(content=body),
-            ]),
+            llm.ainvoke(
+                [
+                    SystemMessage(content=_SYSTEM_PROMPT),
+                    HumanMessage(content=body),
+                ],
+                config=cfg,
+            ),
             timeout=_TITLE_TIMEOUT_SEC,
         )
+        if lf:
+            lf.flush()
         cleaned = _clean_title(getattr(resp, "content", "") or "")
         if cleaned:
             return cleaned

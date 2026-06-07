@@ -14,6 +14,9 @@ services:
       - './backend/alembic:/app/alembic'
       - './backend/alembic.ini:/app/alembic.ini'
     env_file: .env
+    # 백엔드 컨테이너 → 호스트에 떠 있는 self-host Langfuse(:3001) 접근용
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - PYTHONUNBUFFERED=1
     command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
